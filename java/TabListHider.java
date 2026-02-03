@@ -33,6 +33,7 @@ public class TabListHider extends PacketAdapter {
     public void onPacketSending(PacketEvent event) {
         Player receiver = event.getPlayer();
         if (receiver == null) return;
+
         if (event.getPacketType() == PacketType.Play.Server.PLAYER_INFO) {
             try {
                 List<?> entries = (List<?>) event.getPacket().getModifier().read(1);
@@ -46,9 +47,8 @@ public class TabListHider extends PacketAdapter {
 
                     try {
                         UUID playerUUID = (UUID) entry.getClass().getMethod("profileId").invoke(entry);
-                        
-                        if (plugin.isPlayerHidden(playerUUID)) {
-                            plugin.getLogger().info("Blocking hidden player " + playerUUID + " from being shown to " + receiver.getName());
+
+                        if (plugin.isPlayerHidden(playerUUID) && !playerUUID.equals(receiver.getUniqueId())) {
                             modified = true;
                             continue;
                         }
@@ -63,47 +63,112 @@ public class TabListHider extends PacketAdapter {
                     event.getPacket().getModifier().write(1, filteredEntries);
                 }
             } catch (Exception e) {
-                plugin.getLogger().warning("Error filtering PLAYER_INFO: " + e.getMessage());
+                if (plugin.isDebugEnabled()) {
+                    plugin.getLogger().warning("Error filtering PLAYER_INFO: " + e.getMessage());
+                }
+            }
+        }
+
+        else if (event.getPacketType() == PacketType.Play.Server.PLAYER_INFO_REMOVE) {
+            try {
+                List<UUID> uuids = event.getPacket().getUUIDLists().read(0);
+                if (uuids == null || uuids.isEmpty()) return;
+                if (uuids.contains(receiver.getUniqueId())) {
+                    List<UUID> filteredUuids = new ArrayList<>(uuids);
+                    filteredUuids.remove(receiver.getUniqueId());
+
+                    if (filteredUuids.isEmpty()) {
+                        event.setCancelled(true);
+                    } else {
+                        event.getPacket().getUUIDLists().write(0, filteredUuids);
+                    }
+                }
+            } catch (Exception e) {
+                if (plugin.isDebugEnabled()) {
+                    plugin.getLogger().warning("Error filtering PLAYER_INFO_REMOVE: " + e.getMessage());
+                }
             }
         }
     }
+
     public static void removeFromTabList(Player target) {
         SuperHidePlugin plugin = SuperHidePlugin.getInstance();
-        plugin.getLogger().info("Removing " + target.getName() + " from all tab lists");
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            for (Player viewer : Bukkit.getOnlinePlayers()) {
-                try {
-                    com.comphenix.protocol.events.PacketContainer packet =
-                            plugin.getProtocolManager()
-                                    .createPacket(PacketType.Play.Server.PLAYER_INFO_REMOVE);
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (viewer.getUniqueId().equals(target.getUniqueId())) {
+                continue;
+            }
 
-                    List<UUID> uuids = new ArrayList<>();
-                    uuids.add(target.getUniqueId());
-                    packet.getUUIDLists().write(0, uuids);
+            try {
+                com.comphenix.protocol.events.PacketContainer packet =
+                        plugin.getProtocolManager()
+                                .createPacket(PacketType.Play.Server.PLAYER_INFO_REMOVE);
 
-                    plugin.getProtocolManager().sendServerPacket(viewer, packet);
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to send REMOVE to " + viewer.getName() + ": " + e.getMessage());
+                List<UUID> uuids = new ArrayList<>();
+                uuids.add(target.getUniqueId());
+                packet.getUUIDLists().write(0, uuids);
+
+                plugin.getProtocolManager().sendServerPacket(viewer, packet);
+            } catch (Exception e) {
+                if (plugin.isDebugEnabled()) {
+                    plugin.getLogger().warning("Failed to send REMOVE to " + viewer.getName());
                 }
             }
-        }, 1L);
+        }
     }
+
     public static void addToTabList(Player target) {
         SuperHidePlugin plugin = SuperHidePlugin.getInstance();
-        plugin.getLogger().info("Adding " + target.getName() + " back to all tab lists");
+
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            viewer.hidePlayer(plugin, target);
+        }
+
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             for (Player viewer : Bukkit.getOnlinePlayers()) {
-                viewer.hidePlayer(plugin, target);
+                viewer.showPlayer(plugin, target);
+            }
+        }, 2L);
+    }
+
+    public static void ensureSelfVisible(Player player) {
+        SuperHidePlugin plugin = SuperHidePlugin.getInstance();
+        if (plugin.isPlayerHidden(player.getUniqueId())) {
+            return;
+        }
+        try {
+            player.hidePlayer(plugin, player);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                player.showPlayer(plugin, player);
+            }, 1L);
+        } catch (Exception e) {
+            // Dam
+        }
+    }
+    public static void ensureHiddenFromOthers(Player target) {
+        SuperHidePlugin plugin = SuperHidePlugin.getInstance();
+
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (viewer.getUniqueId().equals(target.getUniqueId())) {
+                continue;
             }
 
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                for (Player viewer : Bukkit.getOnlinePlayers()) {
-                    viewer.showPlayer(plugin, target);
-                }
-            }, 2L);
-        }, 1L);
+            try {
+                com.comphenix.protocol.events.PacketContainer packet =
+                        plugin.getProtocolManager()
+                                .createPacket(PacketType.Play.Server.PLAYER_INFO_REMOVE);
+
+                List<UUID> uuids = new ArrayList<>();
+                uuids.add(target.getUniqueId());
+                packet.getUUIDLists().write(0, uuids);
+
+                plugin.getProtocolManager().sendServerPacket(viewer, packet);
+            } catch (Exception e) {
+                // Dam
+            }
+        }
     }
+
     public static void updateTabListForAll(Player targetPlayer) {
         SuperHidePlugin plugin = SuperHidePlugin.getInstance();
 
