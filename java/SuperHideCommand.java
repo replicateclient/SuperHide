@@ -1,7 +1,5 @@
 package me.repc.superhide;
 
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -18,24 +16,25 @@ public class SuperHideCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "This command can only be used by players!");
+            sender.sendMessage(plugin.getMessage("players-only"));
             return true;
         }
 
         Player player = (Player) sender;
 
         if (!player.hasPermission("superhide.use")) {
-            player.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+            player.sendMessage(plugin.getMessage("no-permission"));
             return true;
         }
+
         boolean currentlyHidden = plugin.isPlayerHidden(player.getUniqueId());
         plugin.setPlayerHidden(player.getUniqueId(), !currentlyHidden);
 
         if (!currentlyHidden) {
-            player.sendMessage(ChatColor.GREEN + "You are now hidden from the player list!");
+            player.sendMessage(plugin.getMessage("now-hidden"));
             TabListHider.updateTabListForAll(player);
         } else {
-            player.sendMessage(ChatColor.GREEN + "You are now visible in the player list!");
+            player.sendMessage(plugin.getMessage("now-visible"));
             TabListHider.updateTabListForAll(player);
         }
 
