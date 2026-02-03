@@ -43,7 +43,7 @@ Unlike some plugins, SuperHide does **not** leave empty or glitched nicknames - 
 ## ⚠️ Notes
 
 - This plugin hides players **only from the player list (TAB)**
-- Compatibility with **SuperVanish** has **not been tested**
+- **SuperVanish** is currently compatible with SuperHide
 
 ---
 
